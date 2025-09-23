@@ -1,6 +1,10 @@
 # Medical Literature Pipeline
 
-Automates weekly PubMed searches, stores results in SQLite, and attempts to fetch open-access PDFs via DOI and PubMed Central (PMC). Outputs database, logs, and PDFs to a OneDrive folder or Azure path.
+Automates PubMed searches on a schedule, persists results to SQLite with full‑text search, and attempts to fetch open‑access PDFs via DOI and PubMed Central (PMC). Outputs database, logs, exports, and PDFs to a OneDrive or Azure path.
+
+Useful for clinical research curation (e.g., CT neurological prognosis, neuroimaging + AI) with incremental updates and export to CSV/Excel.
+
+Repo: https://github.com/glopezmdphd/literature-download-pipeline
 
 ## Requirements
 
@@ -24,7 +28,7 @@ OneDrive - YourHealthSystem/
 
 ### 2) Configure
 
-Edit `config.py` or set environment variables (optionally via a `.env` file):
+Edit `config.py` or set environment variables (optionally via a `.env` file – see `.env.example`):
 
 - Email (for notifications)
   - `EMAIL_USERNAME`, `EMAIL_PASSWORD`, `EMAIL_RECIPIENT`
@@ -133,6 +137,10 @@ pip install -r requirements.txt
 #   cd /ABSOLUTE/PATH/TO/literature-download-pipeline && /ABSOLUTE/PATH/TO/literature-download-pipeline/.venv/bin/python main.py
 ```
 
+## Continuous Integration
+
+This repo includes a minimal GitHub Actions workflow that installs dependencies and runs unit tests on pushes and pull requests to `main`.
+
 ## Notes on PDFs
 
 - Many articles are paywalled; pipeline focuses on metadata first.
@@ -151,7 +159,7 @@ pip install -r requirements.txt
 - `main.py` – pipeline logic (search, parse, DB, PDF, email)
 - `config.py` – configuration (email, PubMed, paths, queries, advanced)
 - `requirements.txt` – dependencies
-- `.env.example` – example environment variables
+- `.env.example` – example environment variables (copy to `.env` and edit)
 
 ## Version Control (Git + GitHub)
 
@@ -170,3 +178,25 @@ git push -u origin main
 ```
 
 Use HTTPS (with a Personal Access Token) or SSH (with keys) per your org policy. The `.gitignore` avoids committing virtualenvs, local env files, temp logs, and outputs.
+
+## Topics (GitHub)
+
+Consider adding the following topics to your repository to improve discoverability:
+
+- pubmed
+- medical-literature
+- biomedical-research
+- sqlite
+- full-text-search
+- pdf
+- unpaywall
+- automation
+- neuroimaging
+- computed-tomography
+- machine-learning
+
+You can add them on the repository Settings → General → Topics.
+
+## License
+
+This project is licensed under the MIT License – see the `LICENSE` file for details.

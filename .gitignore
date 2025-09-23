@@ -1,5 +1,48 @@
 # Python
 __pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.so
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Packaging
+build/
+dist/
+*.egg-info/
+*.egg
+
+# Jupyter/IPython
+.ipynb_checkpoints/
+
+# Logs and local state
+*.log
+logs/
+*.sqlite
+*.db
+*.db-journal
+
+# OS files
+.DS_Store
+
+# Environment files
+.env
+.env.*
+
+# App outputs
+exports/
+PDFs/
+database/
+
+# IDE
+.vscode/
+# Python
+__pycache__/
 *.pyc
 .venv/
 .env

@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.medlit.pipeline</string>
+
+  <!-- Adjust paths: point to your repo and Python interpreter (venv recommended) -->
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/bin/env</string>
+    <string>bash</string>
+    <string>-lc</string>
+    <string>cd /ABSOLUTE/PATH/TO/literature-download-pipeline && /usr/bin/env python3 main.py --validate</string>
+  </array>
+
+  <!-- Run daily at 19:00 local time -->
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Hour</key>
+    <integer>19</integer>
+    <key>Minute</key>
+    <integer>0</integer>
+  </dict>
+
+  <!-- Ensure the job exits after run (not persistent) -->
+  <key>KeepAlive</key>
+  <false/>
+
+  <!-- Set working directory for dotenv and relative paths -->
+  <key>WorkingDirectory</key>
+  <string>/ABSOLUTE/PATH/TO/literature-download-pipeline</string>
+
+  <!-- Optional: capture launchd's stdout/stderr (pipeline logs separately) -->
+  <key>StandardOutPath</key>
+  <string>/tmp/medlit.pipeline.out.log</string>
+  <key>StandardErrorPath</key>
+  <string>/tmp/medlit.pipeline.err.log</string>
+</dict>
+</plist>

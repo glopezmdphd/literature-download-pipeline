@@ -1,0 +1,18 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+.env
+
+# macOS
+.DS_Store
+
+# IDEs
+.idea/
+.vscode/
+
+# Outputs (if these ever land in repo root)
+exports/
+PDFs/
+logs/
+database/

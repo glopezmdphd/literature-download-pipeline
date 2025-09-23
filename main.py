@@ -18,6 +18,7 @@ import requests
 import time
 import logging
 import smtplib
+import json
 from datetime import datetime, timedelta
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
@@ -28,10 +29,20 @@ from typing import Optional, Set
 import atexit
 import random
 import re
-from Bio import Entrez
+from urllib.error import URLError
+from Bio import Entrez  # type: ignore
 from bs4 import BeautifulSoup
 
-from config import EMAIL_CONFIG, PUBMED_CONFIG, PATHS, SEARCH_QUERIES, ADVANCED_CONFIG, UNPAYWALL_CONFIG, PIPELINE_CONFIG, PDF_HOSTS
+from config import (
+    EMAIL_CONFIG,
+    PUBMED_CONFIG,
+    PATHS,
+    SEARCH_QUERIES,
+    ADVANCED_CONFIG,
+    UNPAYWALL_CONFIG,
+    PIPELINE_CONFIG,
+    PDF_HOSTS
+)
 
 logger = logging.getLogger(__name__)
 
@@ -40,71 +51,45 @@ logger = logging.getLogger(__name__)
 # ============================================================================
 
 # Email Configuration
-EMAIL_CONFIG = {
-    'smtp_server': 'smtp.office365.com',  # Your enterprise SMTP server
-    'smtp_port': 587,
-    'username': 'your.email@enterprise.com',  # Your email
-    'password': 'your_app_password',  # Use app password for security
-    'recipient': 'your.email@enterprise.com'  # Where to send notifications
-}
+# EMAIL_CONFIG = {
+#     'smtp_server': 'smtp.office365.com',  # Your enterprise SMTP server
+#     'smtp_port': 587,
+#     'username': 'your.email@enterprise.com',  # Your email
+#     'password': 'your_app_password',  # Use app password for security
+#     'recipient': 'your.email@enterprise.com'  # Where to send notifications
+# }
 
 # PubMed Configuration
-PUBMED_CONFIG = {
-    'email': 'your.email@enterprise.com',  # Required by NCBI
-    'api_key': 'your_ncbi_api_key',  # Optional but recommended
-    'tool_name': 'CT_Neurological_Literature_Monitor'
-}
+# PUBMED_CONFIG = {
+#     'email': 'your.email@enterprise.com',  # Required by NCBI
+#     'api_key': 'your_ncbi_api_key',  # Optional but recommended
+#     'tool_name': 'CT_Neurological_Literature_Monitor'
+# }
 
-# File Paths
-PATHS = {
-    'onedrive_base': r'C:\Users\YourUsername\OneDrive - YourEnterprise\Medical_Literature',
-    'database': r'C:\Users\YourUsername\OneDrive - YourEnterprise\Medical_Literature\database\articles.db',
-    'log_file': r'C:\Users\YourUsername\OneDrive - YourEnterprise\Medical_Literature\logs\pipeline.log'
-}
-
-# Search Queries - Add your specific research interests
-SEARCH_QUERIES = {
-    'ct_neurological_prognosis': {
-        'query': '("head CT" OR "cranial CT" OR "brain CT") AND (prognosis OR prognostic OR outcome OR prediction) AND (neurological OR neurologic)',
-        'max_results': 50
-    },
-    'ml_medical_imaging': {
-        'query': '("machine learning" OR "deep learning" OR "artificial intelligence") AND ("medical imaging" OR "CT scan" OR "computed tomography") AND (brain OR neurological)',
-        'max_results': 30
-    },
-    'ct_outcome_prediction': {
-        'query': '("computed tomography" OR "CT imaging") AND ("outcome prediction" OR "prognostic model" OR "clinical prediction")',
-        'max_results': 30
-    }
-}
-
-# Override placeholders with config.py values
-from config import (
-    EMAIL_CONFIG as _EMAIL_CONFIG,
-    PUBMED_CONFIG as _PUBMED_CONFIG,
-    PATHS as _PATHS,
-    SEARCH_QUERIES as _SEARCH_QUERIES,
-    ADVANCED_CONFIG as _ADVANCED_CONFIG,
-)
-EMAIL_CONFIG = _EMAIL_CONFIG
-PUBMED_CONFIG = _PUBMED_CONFIG
-PATHS = _PATHS
-SEARCH_QUERIES = _SEARCH_QUERIES
-ADVANCED_CONFIG = _ADVANCED_CONFIG
+# NOTE: Placeholder PATHS and SEARCH_QUERIES removed to avoid overriding config imports.
 
 # ============================================================================
 # LOGGING SETUP
 # ============================================================================
 
 def setup_logging():
-    """Configure logging for the pipeline."""
-    os.makedirs(os.path.dirname(PATHS['log_file']), exist_ok=True)
-    
+    """Configure logging for the pipeline.
+
+    Safely create the log directory only if a directory component exists. This
+    allows tests to inject a simple filename (no directory) without errors at
+    import time.
+    """
+    log_target = PATHS.get('log_file')
+    if log_target:
+        log_dir = os.path.dirname(log_target)
+        if log_dir:  # Guard against empty string
+            os.makedirs(log_dir, exist_ok=True)
+
     logging.basicConfig(
         level=logging.INFO,
         format='%(asctime)s - %(levelname)s - %(message)s',
         handlers=[
-            logging.FileHandler(PATHS['log_file']),
+            logging.FileHandler(log_target) if log_target else logging.StreamHandler(),
             logging.StreamHandler()
         ]
     )
@@ -127,83 +112,32 @@ def validate_environment() -> bool:
         ok = False
     # Paths
     try:
-        os.makedirs(os.path.dirname(PATHS['database']), exist_ok=True)
-        os.makedirs(os.path.dirname(PATHS['log_file']), exist_ok=True)
-        # Test write permission for logs
-        test_log = PATHS['log_file'] + '.writecheck'
-        with open(test_log, 'w') as f:
-            f.write('ok')
-        os.remove(test_log)
-    except Exception as e:
-        logger.error(f'Path setup failed: {e}')
+        db_dir = os.path.dirname(PATHS['database']) if PATHS.get('database') else ''
+        if db_dir:
+            os.makedirs(db_dir, exist_ok=True)
+    except (OSError, IOError) as e:
+        logger.error('Path setup failed: %s', e)
         ok = False
     # Unpaywall
     if UNPAYWALL_CONFIG.get('enabled') and not UNPAYWALL_CONFIG.get('email'):
         logger.warning('UNPAYWALL enabled but email not set; set UNPAYWALL_EMAIL or PUBMED_EMAIL')
     return ok
 
-_LOCK_FD = None
-
-def acquire_run_lock(force: bool = False) -> bool:
-    global _LOCK_FD
-    lock_path = PATHS.get('lock_file')
-    if not lock_path:
-        return True
-    lock_dir = os.path.dirname(lock_path)
-    os.makedirs(lock_dir, exist_ok=True)
-
-    if os.path.exists(lock_path) and not force:
-        try:
-            # Stale lock check by mtime
-            mtime = datetime.fromtimestamp(os.path.getmtime(lock_path))
-            age = datetime.now() - mtime
-            if age > timedelta(hours=PIPELINE_CONFIG.get('lock_timeout_hours', 6)):
-                logger.warning('Stale lock detected; removing')
-                os.remove(lock_path)
-            else:
-                logger.error(f'Another run appears active (lock at {lock_path}). Use --force-run to override.')
-                return False
-        except Exception:
-            pass
-    # Atomic create
-    try:
-        _LOCK_FD = os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-        os.write(_LOCK_FD, f"pid={os.getpid()}\nstarted={datetime.now().isoformat()}\n".encode('utf-8'))
-        os.fsync(_LOCK_FD)
-        logger.info(f'Acquired run lock: {lock_path}')
-        return True
-    except FileExistsError:
-        if force:
-            try:
-                os.remove(lock_path)
-                return acquire_run_lock(force=False)
-            except Exception:
-                return False
-        logger.error('Lock already exists; aborting run')
-        return False
-
-def release_run_lock():
-    global _LOCK_FD
-    lock_path = PATHS.get('lock_file')
-    try:
-        if _LOCK_FD is not None:
-            os.close(_LOCK_FD)
-            _LOCK_FD = None
-        if lock_path and os.path.exists(lock_path):
-            os.remove(lock_path)
-            logger.info('Released run lock')
-    except Exception:
-        pass
-
-atexit.register(release_run_lock)
+# Removed eager directory creation at import time to allow tests to override PATHS safely.
 
 # ============================================================================
 # DATABASE FUNCTIONS
 # ============================================================================
 
 def init_database():
-    """Initialize SQLite database with required tables."""
-    os.makedirs(os.path.dirname(PATHS['database']), exist_ok=True)
+    """Initialize SQLite database with required tables.
+
+    Directory creation is guarded to avoid errors when PATHS are overridden in tests
+    with temporary directories.
+    """
+    db_dir = os.path.dirname(PATHS['database']) if PATHS.get('database') else ''
+    if db_dir:
+        os.makedirs(db_dir, exist_ok=True)
     
     conn = sqlite3.connect(PATHS['database'])
     cursor = conn.cursor()
@@ -349,10 +283,10 @@ def get_last_search_time(query_name: str):
             # SQLite timestamp by default in string
             try:
                 return datetime.fromisoformat(row[0])
-            except Exception:
+            except ValueError:
                 return None
         return None
-    except Exception:
+    except (sqlite3.Error, OSError):
         return None
 
 def search_pubmed(query_name, query, years_back=5, incremental=True):
@@ -373,7 +307,7 @@ def search_pubmed(query_name, query, years_back=5, incremental=True):
     # Build query and parameters
     full_query = f"{query} AND English[lang]"
     datetype = ADVANCED_CONFIG.get('datetype', 'edat')
-    logger.info(f"Searching PubMed ({datetype} {mindate}..{end_date}) with query: {full_query}")
+    logger.info("Searching PubMed (%s %s..%s) with query: %s", datetype, mindate, end_date, full_query)
 
     try:
         tries = PIPELINE_CONFIG.get('max_retries', 3)
@@ -395,10 +329,10 @@ def search_pubmed(query_name, query, years_back=5, incremental=True):
                 h.close()
                 count = int(res.get('Count', 0))
                 break
-            except Exception as ee:
+            except (OSError, URLError, ValueError) as ee:
                 if i == tries - 1:
                     raise
-                logger.warning(f"esearch(count) retry {i+1}/{tries}: {ee}")
+                logger.warning("esearch(count) retry %d/%d: %s", i+1, tries, ee)
                 _backoff_sleep(i)
         time.sleep(ADVANCED_CONFIG.get('rate_limit_delay', 1))
 
@@ -426,15 +360,15 @@ def search_pubmed(query_name, query, years_back=5, incremental=True):
                     h.close()
                     pmids.extend(page.get('IdList', []))
                     break
-                except Exception as ee:
+                except (OSError, URLError, ValueError) as ee:
                     if i == tries - 1:
                         raise
-                    logger.warning(f"esearch(page) retry {i+1}/{tries}: {ee}")
+                    logger.warning("esearch(page) retry %d/%d: %s", i+1, tries, ee)
                     _backoff_sleep(i)
             retstart += batch
             time.sleep(ADVANCED_CONFIG.get('rate_limit_delay', 1))
 
-        logger.info(f"Found {len(pmids)} articles (count={count})")
+        logger.info("Found %d articles (count=%d)", len(pmids), count)
 
         # 3) efetch in chunks
         all_articles = []
@@ -448,17 +382,17 @@ def search_pubmed(query_name, query, years_back=5, incremental=True):
                     fh.close()
                     all_articles.extend(arts.get('PubmedArticle', []))
                     break
-                except Exception as ee:
+                except (OSError, URLError, ValueError) as ee:
                     if i == tries - 1:
                         raise
-                    logger.warning(f"efetch retry {i+1}/{tries} (offset {i0}): {ee}")
+                    logger.warning("efetch retry %d/%d (offset %d): %s", i+1, tries, i0, ee)
                     _backoff_sleep(i)
             time.sleep(ADVANCED_CONFIG.get('rate_limit_delay', 1))
 
         return parse_pubmed_articles(all_articles)
 
-    except Exception as e:
-        logger.error(f"Error searching PubMed: {str(e)}")
+    except (OSError, URLError, ValueError) as e:
+        logger.error("Error searching PubMed: %s", e)
         return []
 
 def parse_pubmed_articles(articles):
@@ -539,8 +473,8 @@ def parse_pubmed_articles(articles):
                 'url': url
             })
             
-        except Exception as e:
-            logger.error(f"Error parsing article: {str(e)}")
+        except (KeyError, TypeError, ValueError) as e:
+            logger.error("Error parsing article: %s", e)
             continue
     
     return parsed_articles
@@ -584,10 +518,10 @@ def download_pdf_from_doi(session, doi, save_path, max_attempts=3):
     ]
     
     timeout = ADVANCED_CONFIG.get('request_timeout', 30)
-    for attempt in range(max_attempts):
+    for _attempt in range(max_attempts):
         for doi_url in doi_urls:
             try:
-                logger.info(f"Attempting PDF download from DOI: {doi_url}")
+                logger.info("Attempting PDF download from DOI: %s", doi_url)
                 response = session.get(doi_url, headers=headers, timeout=timeout, allow_redirects=True)
                 
                 # Check if response contains PDF
@@ -595,7 +529,7 @@ def download_pdf_from_doi(session, doi, save_path, max_attempts=3):
                 if ctype.startswith('application/pdf') or response.content[:4] == b'%PDF':
                     with open(save_path, 'wb') as f:
                         f.write(response.content)
-                    logger.info(f"Successfully downloaded PDF from DOI: {doi}")
+                    logger.info("Successfully downloaded PDF from DOI: %s", doi)
                     return True
                 
                 # If not direct PDF, try to find PDF link in the page
@@ -610,7 +544,7 @@ def download_pdf_from_doi(session, doi, save_path, max_attempts=3):
                                 pdf_url = urljoin(doi_url, pdf_url)
                             # Host filter
                             if not _is_pdf_host_allowed(pdf_url):
-                                logger.info(f"Skipping blocked PDF host: {urlparse(pdf_url).netloc}")
+                                logger.info("Skipping blocked PDF host: %s", urlparse(pdf_url).netloc)
                                 continue
                             
                             pdf_response = session.get(pdf_url, headers=headers, timeout=timeout, allow_redirects=True)
@@ -618,13 +552,13 @@ def download_pdf_from_doi(session, doi, save_path, max_attempts=3):
                             if pct.startswith('application/pdf') or pdf_response.content[:4] == b'%PDF':
                                 with open(save_path, 'wb') as f:
                                     f.write(pdf_response.content)
-                                logger.info(f"Successfully downloaded PDF from link: {pdf_url}")
+                                logger.info("Successfully downloaded PDF from link: %s", pdf_url)
                                 return True
                 
                 time.sleep(max(ADVANCED_CONFIG.get('rate_limit_delay', 1), 1))  # Rate limiting
                 
-            except Exception as e:
-                logger.warning(f"Failed to download PDF from {doi_url}: {str(e)}")
+            except (requests.RequestException, OSError, ValueError) as e:
+                logger.warning("Failed to download PDF from %s: %s", doi_url, e)
                 time.sleep(ADVANCED_CONFIG.get('rate_limit_delay', 1))
     
     return False
@@ -641,7 +575,7 @@ def download_pdf_from_pmc(session, pmid, save_path):
         try:
             links = linkset[0]['LinkSetDb'][0]['Link']
             ids = [lnk['Id'] for lnk in links]
-        except Exception:
+        except (KeyError, IndexError, TypeError):
             ids = []
         if not ids:
             return False
@@ -664,14 +598,14 @@ def download_pdf_from_pmc(session, pmid, save_path):
                 if ctype.startswith('application/pdf') or r.content[:4] == b'%PDF':
                     with open(save_path, 'wb') as f:
                         f.write(r.content)
-                    logger.info(f"Successfully downloaded PMC PDF for PMID {pmid}")
+                    logger.info("Successfully downloaded PMC PDF for PMID %s", pmid)
                     return True
-            except Exception as e:
-                logger.debug(f"PMC attempt failed for {url}: {e}")
+            except (requests.RequestException, OSError, ValueError) as e:
+                logger.debug("PMC attempt failed for %s: %s", url, e)
         return False
         
-    except Exception as e:
-        logger.warning(f"Failed to download PDF from PMC for PMID {pmid}: {str(e)}")
+    except (requests.RequestException, OSError, ValueError) as e:
+        logger.warning("Failed to download PDF from PMC for PMID %s: %s", pmid, e)
         return False
 
 def try_unpaywall(session, doi):
@@ -700,7 +634,7 @@ def try_unpaywall(session, doi):
                 if ctype.startswith('application/pdf') or pr.content[:4] == b'%PDF':
                     return pr.content
             return None
-        except Exception:
+        except (requests.RequestException, ValueError):
             _backoff_sleep(i)
     return None
 
@@ -715,11 +649,11 @@ def attempt_pdf_download(article, search_query_name, session, conn=None):
     
     # Skip if already downloaded
     if os.path.exists(save_path):
-        logger.info(f"PDF already exists for PMID {pmid}")
+        logger.info("PDF already exists for PMID %s", pmid)
         update_pdf_status(pmid, save_path, True, 0, conn=conn)
         return True
     
-    logger.info(f"Attempting to download PDF for PMID {pmid}: {article['title']}")
+    logger.info("Attempting to download PDF for PMID %s: %s", pmid, article['title'])
     
     attempts = 0
     success = False
@@ -732,10 +666,14 @@ def attempt_pdf_download(article, search_query_name, session, conn=None):
             if content:
                 with open(save_path, 'wb') as f:
                     f.write(content)
-                logger.info(f"Successfully downloaded PDF via Unpaywall for DOI {article['doi']}")
+                logger.info("Successfully downloaded PDF via Unpaywall for DOI %s", article['doi'])
                 success = True
-        except Exception as e:
-            logger.debug(f"Unpaywall attempt failed: {e}")
+        except (requests.RequestException, OSError) as e:
+            # Network / IO issues are expected occasionally; keep at debug level
+            logger.debug("Unpaywall network attempt failed: %s", e)
+        except (ValueError, KeyError, TypeError, json.JSONDecodeError) as e:
+            # Parsing / unexpected schema problems are more actionable
+            logger.warning("Unpaywall parsing failed for DOI %s: %s", article['doi'], e)
 
     # Method 2: Try DOI landing page
     if article['doi'] and not success:
@@ -750,10 +688,10 @@ def attempt_pdf_download(article, search_query_name, session, conn=None):
     # Update database with results
     if success:
         update_pdf_status(pmid, save_path, True, attempts, conn=conn)
-        logger.info(f"Successfully downloaded PDF for PMID {pmid}")
+        logger.info("Successfully downloaded PDF for PMID %s", pmid)
     else:
         update_pdf_status(pmid, None, False, attempts, conn=conn)
-        logger.warning(f"Failed to download PDF for PMID {pmid} after {attempts} attempts")
+        logger.warning("Failed to download PDF for PMID %s after %d attempts", pmid, attempts)
     
     return success
 
@@ -765,7 +703,7 @@ def _is_pdf_host_allowed(url: str) -> bool:
         if allow:
             return any(host.endswith(a.lower()) for a in allow)
         return not any(host.endswith(d.lower()) for d in deny)
-    except Exception:
+    except (ValueError, KeyError, AttributeError):  # Fallback to allow pipeline to proceed even if URL parsing oddities
         return True
 
 # ============================================================================
@@ -785,14 +723,13 @@ def send_email_notification(subject, message, attachments=None):
         # Attach files if provided
         if attachments:
             from email.mime.base import MIMEBase
-            from email.mime.application import MIMEApplication
             from email import encoders
             import mimetypes
             for path in attachments:
                 try:
                     if not path or not os.path.exists(path):
                         continue
-                    ctype, encoding = mimetypes.guess_type(path)
+                    ctype, _ = mimetypes.guess_type(path)
                     maintype, subtype = (ctype.split('/', 1) if ctype else ('application', 'octet-stream'))
                     with open(path, 'rb') as f:
                         part = MIMEBase(maintype, subtype)
@@ -800,8 +737,8 @@ def send_email_notification(subject, message, attachments=None):
                     encoders.encode_base64(part)
                     part.add_header('Content-Disposition', f'attachment; filename="{os.path.basename(path)}"')
                     msg.attach(part)
-                except Exception as e:
-                    logger.warning(f"Failed to attach file {path}: {e}")
+                except (OSError, IOError, ValueError) as e:
+                    logger.warning("Failed to attach file %s: %s", path, e)
         
         server = smtplib.SMTP(EMAIL_CONFIG['smtp_server'], EMAIL_CONFIG['smtp_port'], timeout=15)
         server.starttls()
@@ -811,8 +748,8 @@ def send_email_notification(subject, message, attachments=None):
         
         logger.info("Email notification sent successfully")
         
-    except Exception as e:
-        logger.error(f"Failed to send email notification: {str(e)}")
+    except (smtplib.SMTPException, OSError) as e:
+        logger.error("Failed to send email notification: %s", e)
 
 # ============================================================================
 # MAIN PIPELINE FUNCTIONS
@@ -820,7 +757,7 @@ def send_email_notification(subject, message, attachments=None):
 
 def process_search_query(query_name, query_config):
     """Process a single search query and download PDFs."""
-    logger.info(f"Processing search query: {query_name}")
+    logger.info("Processing search query: %s", query_name)
     
     # Search PubMed
     articles = search_pubmed(
@@ -839,7 +776,7 @@ def process_search_query(query_name, query_config):
         
         # Skip if article already exists
         if article_exists(pmid, conn=conn):
-            logger.info(f"Article {pmid} already in database, skipping")
+            logger.info("Article %s already in database, skipping", pmid)
             continue
         
         # Save article to database
@@ -867,7 +804,7 @@ def process_search_query(query_name, query_config):
     conn.commit()
     conn.close()
     
-    logger.info(f"Query '{query_name}' completed: {len(articles)} found, {new_articles} new articles, {new_pdfs} new PDFs")
+    logger.info("Query '%s' completed: %d found, %d new articles, %d new PDFs", query_name, len(articles), new_articles, new_pdfs)
     
     return len(articles), new_articles, new_pdfs
 
@@ -891,8 +828,8 @@ def run_full_pipeline():
             total_new_articles += new_articles
             total_new_pdfs += new_pdfs
             
-        except Exception as e:
-            logger.error(f"Error processing query '{query_name}': {str(e)}")
+        except (sqlite3.Error, requests.RequestException, OSError, ValueError) as e:
+            logger.error("Error processing query '%s': %s", query_name, e)
     
     # Calculate runtime
     end_time = datetime.now()
@@ -931,15 +868,15 @@ Next scheduled run: {(datetime.now() + timedelta(days=7)).strftime('%Y-%m-%d')}
     csv_path = None
     try:
         xlsx_path = export_articles_excel(output_path=None, search_term=None, split_by_topic=True)
-    except Exception as e:
-        logger.warning(f"Excel export failed: {e}")
+    except (OSError, ValueError) as e:
+        logger.warning("Excel export failed: %s", e)
     try:
         csv_path = export_articles_csv(output_path=None, search_term=None, split_by_topic=False)
         if isinstance(csv_path, list):
             # Should not happen here; ensure single CSV
             csv_path = csv_path[0] if csv_path else None
-    except Exception as e:
-        logger.warning(f"CSV export failed: {e}")
+    except (OSError, ValueError) as e:
+        logger.warning("CSV export failed: %s", e)
 
     # Decide attachments based on size guard
     max_mb = PIPELINE_CONFIG.get('max_email_attachment_mb', 25)
@@ -955,7 +892,7 @@ Next scheduled run: {(datetime.now() + timedelta(days=7)).strftime('%Y-%m-%d')}
                     attachments.append(path)
                     total_size_mb += sz
                     return True
-        except Exception:
+        except (OSError, IOError):  # Size calculation issues should not abort attachment collection
             pass
         return False
 
@@ -995,7 +932,7 @@ def search_database(search_term):
             ORDER BY a.year DESC
         ''', (search_term,))
         results = cursor.fetchall()
-    except Exception:
+    except (sqlite3.Error, ValueError):  # FTS table missing or malformed -> fallback to LIKE search
         cursor.execute('''
             SELECT pmid, title, authors, journal, year, pdf_downloaded
             FROM articles 
@@ -1057,7 +994,7 @@ def _get_export_rows(search_term: Optional[str] = None):
                     WHERE f MATCH ?
                     ORDER BY a.year DESC
                 ''', (search_term,))
-            except Exception:
+            except (sqlite3.Error, ValueError):  # FTS unavailable -> degrade gracefully
                 cur.execute('''
                     SELECT * FROM articles
                     WHERE title LIKE ? OR abstract LIKE ? OR keywords LIKE ?
@@ -1082,7 +1019,7 @@ def export_articles_csv(output_path: Optional[str] = None, search_term: Optional
             base = f"articles_{_sanitize_filename(search_term) if search_term else 'all'}_{stamp}.csv"
             output_path = os.path.join(exports_dir, base)
         df.to_csv(output_path, index=False, encoding='utf-8')
-        logger.info(f"Exported {len(df)} rows to CSV: {output_path}")
+        logger.info("Exported %d rows to CSV: %s", len(df), output_path)
         return output_path
     else:
         # Split by topic: write multiple CSV files, one per search_query
@@ -1092,7 +1029,7 @@ def export_articles_csv(output_path: Optional[str] = None, search_term: Optional
                 base = f"articles_{_sanitize_filename(search_term) if search_term else 'all'}_{stamp}.csv"
                 output_path = os.path.join(exports_dir, base)
             df.to_csv(output_path, index=False, encoding='utf-8')
-            logger.info(f"Exported {len(df)} rows to CSV: {output_path}")
+            logger.info("Exported %d rows to CSV: %s", len(df), output_path)
             return [output_path]
 
         topic_dir = os.path.join(exports_dir, f"by_topic_{stamp}")
@@ -1103,7 +1040,7 @@ def export_articles_csv(output_path: Optional[str] = None, search_term: Optional
             path = os.path.join(topic_dir, fname)
             g.to_csv(path, index=False, encoding='utf-8')
             outputs.append(path)
-        logger.info(f"Exported {len(outputs)} topic CSV files to {topic_dir}")
+        logger.info("Exported %d topic CSV files to %s", len(outputs), topic_dir)
         return outputs
 
 def export_articles_excel(output_path: Optional[str] = None, search_term: Optional[str] = None, split_by_topic: bool = False) -> str:
@@ -1145,7 +1082,7 @@ def export_articles_excel(output_path: Optional[str] = None, search_term: Option
                 try:
                     ws.auto_filter.ref = ws.dimensions
                     ws.freeze_panes = 'A2'
-                except Exception:
+                except (AttributeError, ValueError):  # Non-critical formatting issues
                     pass
         else:
             df.to_excel(writer, index=False, sheet_name='Articles')
@@ -1153,14 +1090,70 @@ def export_articles_excel(output_path: Optional[str] = None, search_term: Option
             try:
                 ws.auto_filter.ref = ws.dimensions
                 ws.freeze_panes = 'A2'
-            except Exception:
+            except (AttributeError, ValueError):  # Non-critical formatting issues
                 pass
-    logger.info(f"Exported {'split-by-topic ' if split_by_topic else ''}{len(df)} rows to Excel: {output_path}")
+    logger.info("Exported %s%d rows to Excel: %s", 'split-by-topic ' if split_by_topic else '', len(df), output_path)
     return output_path
 
-# ============================================================================
+def acquire_run_lock(force: bool = False) -> bool:
+    lock_path = PATHS.get('lock_file')
+    if not lock_path:
+        return True
+    lock_dir = os.path.dirname(lock_path)
+    try:
+        if lock_dir:
+            os.makedirs(lock_dir, exist_ok=True)
+    except OSError as e:
+        logger.error("Failed to create lock directory: %s", e)
+        return False
+
+    if os.path.exists(lock_path) and not force:
+        try:
+            mtime = datetime.fromtimestamp(os.path.getmtime(lock_path))
+            age = datetime.now() - mtime
+            if age > timedelta(hours=PIPELINE_CONFIG.get('lock_timeout_hours', 6)):
+                logger.warning('Stale lock detected; removing')
+                os.remove(lock_path)
+            else:
+                logger.error('Another run appears active (lock at %s). Use --force-run to override.', lock_path)
+                return False
+        except (OSError, ValueError) as e:
+            logger.error("Error checking lock file: %s", e)
+            return False
+
+    try:
+        with open(lock_path, 'x', encoding='utf-8') as lock_file:
+            lock_file.write(f"pid={os.getpid()}\nstarted={datetime.now().isoformat()}\n")
+        logger.info("Acquired run lock: %s", lock_path)
+        return True
+    except FileExistsError:
+        if force:
+            try:
+                os.remove(lock_path)
+                return acquire_run_lock(force=False)
+            except (OSError, IOError) as e:
+                logger.error("Failed to remove existing lock: %s", e)
+                return False
+        logger.error('Lock already exists; aborting run')
+        return False
+    except (OSError, IOError) as e:
+        logger.error("Failed to acquire lock: %s", e)
+        return False
+
+def release_run_lock():
+    lock_path = PATHS.get('lock_file')
+    try:
+        if lock_path and os.path.exists(lock_path):
+            os.remove(lock_path)
+            logger.info('Released run lock')
+    except (OSError, IOError) as e:
+        logger.error("Failed to release lock: %s", e)
+
+atexit.register(release_run_lock)
+
+# =========================================================================
 # MAIN EXECUTION
-# ============================================================================
+# =========================================================================
 
 if __name__ == "__main__":
     # Setup logging
@@ -1180,9 +1173,9 @@ if __name__ == "__main__":
 
     try:
         if args.validate:
-            ok = validate_environment()
-            logger.info(f"Validation {'PASSED' if ok else 'FAILED'}")
-            raise SystemExit(0 if ok else 2)
+            valid = validate_environment()
+            logger.info("Validation %s", 'PASSED' if valid else 'FAILED')
+            raise SystemExit(0 if valid else 2)
 
         if args.export:
             if not args.only_export:
@@ -1192,8 +1185,8 @@ if __name__ == "__main__":
                 if args.no_incremental:
                     PIPELINE_CONFIG['incremental'] = False
                 try:
-                    ok = validate_environment()
-                    if not ok:
+                    valid = validate_environment()
+                    if not valid:
                         logger.error('Validation failed; aborting run')
                         raise SystemExit(2)
                     run_full_pipeline()
@@ -1212,25 +1205,24 @@ if __name__ == "__main__":
             if args.no_incremental:
                 PIPELINE_CONFIG['incremental'] = False
             try:
-                ok = validate_environment()
-                if not ok:
+                valid = validate_environment()
+                if not valid:
                     logger.error('Validation failed; aborting run')
                     raise SystemExit(2)
                 run_full_pipeline()
                 stats = get_pipeline_stats()
-                logger.info(f"Pipeline Statistics: {stats}")
+                logger.info("Pipeline Statistics: %s", stats)
             finally:
                 PIPELINE_CONFIG['incremental'] = prev_incremental
                 release_run_lock()
-    except Exception as e:
-        logger.error(f"Pipeline failed with error: {str(e)}")
-        # Send error notification for default runs only
+    except (sqlite3.Error, requests.RequestException, OSError, ValueError) as e:
+        logger.error("Pipeline failed with error: %s", e)
         if not args.export and not args.no_email:
             try:
                 send_email_notification(
                     "Medical Literature Pipeline - ERROR",
-                    f"Pipeline failed with error: {str(e)}\n\nCheck log file: {PATHS['log_file']}"
+                    "Pipeline failed with error: %s\n\nCheck log file: %s" % (e, PATHS['log_file'])
                 )
-            except Exception:
-                pass  # Don't fail on notification failure
-        
+            except (smtplib.SMTPException, OSError):
+                pass
+

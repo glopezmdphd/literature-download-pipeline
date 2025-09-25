@@ -46,8 +46,9 @@ UNPAYWALL_CONFIG = {
 # ============================================================================
 # FILE PATHS - UPDATE THESE FOR YOUR SYSTEM
 # ============================================================================
-# Base path for OneDrive (check your actual OneDrive path)
-ONEDRIVE_BASE = r'C:\Users\YourUsername\OneDrive - YourHealthcareSystem\Medical_Literature'
+# Base path - Using local drive to avoid UNC path issues
+# This will create the folder structure on your C: drive for reliability
+ONEDRIVE_BASE = r'C:\Users\george.a.lopez\Medical_Literature_Pipeline'
 
 PATHS = {
     'onedrive_base': ONEDRIVE_BASE,
@@ -60,22 +61,12 @@ PATHS = {
 # SEARCH QUERIES FOR YOUR RESEARCH
 # ============================================================================
 SEARCH_QUERIES = {
-    # CT neurological prognosis/outcomes
+    # Just test with one topic first - CT neurological prognosis/outcomes
     'ct_neurological_prognosis': {
         'query': '(("Tomography, X-Ray Computed"[MeSH Terms]) OR ("computed tomography"[tiab]) OR (CT[tiab]) OR ("head CT"[tiab]) OR ("cranial CT"[tiab])) AND (("Prognosis"[MeSH Terms]) OR (prognos*[tiab]) OR (outcome*[tiab]) OR (predict*[tiab]) OR ("risk model"[tiab]) OR ("risk prediction"[tiab])) AND (("Brain Injuries"[MeSH Terms]) OR ("Traumatic Brain Injury"[MeSH Terms]) OR (neurolog*[tiab]) OR (brain[tiab]) OR (cranial[tiab]))'
-    },
-    # AI/deep learning applied to CT brain/neuro imaging
-    'ml_ct_brain_analysis': {
-        'query': '(("Artificial Intelligence"[MeSH Terms]) OR ("Machine Learning"[MeSH Terms]) OR ("deep learning"[tiab]) OR ("machine learning"[tiab]) OR ("neural network"[tiab]) OR ("artificial intelligence"[tiab])) AND (("Tomography, X-Ray Computed"[MeSH Terms]) OR ("computed tomography"[tiab]) OR (CT[tiab])) AND (("Brain"[MeSH Terms]) OR ("Brain Injuries"[MeSH Terms]) OR (neurolog*[tiab]) OR (brain[tiab]) OR ("head trauma"[tiab]) OR ("brain injury"[tiab]) OR (stroke[tiab]))'
-    },
-    # Outcome/prediction models on CT for neuro conditions
-    'ct_outcome_prediction': {
-        'query': '(("Tomography, X-Ray Computed"[MeSH Terms]) OR ("computed tomography"[tiab]) OR (CT[tiab])) AND (("Prognosis"[MeSH Terms]) OR ("Risk Assessment"[MeSH Terms]) OR ("Models, Statistical"[MeSH Terms]) OR (prognos*[tiab]) OR (predict*[tiab]) OR ("prediction model"[tiab]) OR ("risk score"[tiab])) AND (("Brain"[MeSH Terms]) OR ("Brain Injuries"[MeSH Terms]) OR (neurolog*[tiab]) OR (brain[tiab]))'
-    },
-    # Neurological imaging + AI with prognostic focus
-    'neurological_imaging_ai': {
-        'query': '(("Diagnostic Imaging"[MeSH Terms]) OR ("Neuroimaging"[MeSH Terms]) OR ("brain imaging"[tiab]) OR ("neurological imaging"[tiab])) AND (("Artificial Intelligence"[MeSH Terms]) OR ("Machine Learning"[MeSH Terms]) OR ("deep learning"[tiab]) OR ("machine learning"[tiab]) OR ("artificial intelligence"[tiab])) AND (("Prognosis"[MeSH Terms]) OR (prognos*[tiab]) OR (predict*[tiab]) OR (outcome*[tiab]))'
     }
+    # TODO: After successful test, add back the other 3 topics:
+    # ml_ct_brain_analysis, ct_outcome_prediction, neurological_imaging_ai
 }
 
 # ============================================================================

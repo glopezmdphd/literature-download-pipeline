@@ -41,21 +41,23 @@ database/
 
 # IDE
 .vscode/
-# Python
-__pycache__/
-*.pyc
-.venv/
-.env
-
-# macOS
-.DS_Store
-
-# IDEs
 .idea/
-.vscode/
+
+# Local batch scripts (user-specific runners)
+run_*.bat
 
 # Outputs (if these ever land in repo root)
 exports/
 PDFs/
 logs/
 database/
+
+# Python cache files
+__pycache__/
+*.pyc
+
+# Local batch scripts
+run_*.bat
+
+# Environment files (if not already there)
+.env

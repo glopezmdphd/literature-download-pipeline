@@ -231,8 +231,11 @@ def save_article(article_data, conn=None):
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ''', article_data)
     
+    # Always commit individual article saves to prevent data loss
+    # This ensures articles are saved even if later processing fails
+    conn.commit()
+    
     if close_conn:
-        conn.commit()
         conn.close()
 
 def update_pdf_status(pmid, pdf_path=None, downloaded=False, attempts=0, conn=None):

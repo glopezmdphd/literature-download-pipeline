@@ -43,6 +43,22 @@ UNPAYWALL_CONFIG = {
     'email': os.getenv('UNPAYWALL_EMAIL', os.getenv('PUBMED_EMAIL', 'george.lopez@swedish.org')),
 }
 
+# Improved PDF download configuration for better success rates
+PDF_DOWNLOAD_CONFIG = {
+    'timeout': 45,  # Increased timeout for slow servers
+    'retries': 5,   # More retry attempts
+    'backoff_factor': 2.0,  # Exponential backoff
+    'user_agents': [
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:91.0) Gecko/20100101',
+        'Mozilla/5.0 (compatible; Academic Research Bot; +http://university.edu/bot)',
+    ],
+    'enable_unpaywall': True,    # Try Unpaywall for open access versions
+    'enable_pmc': True,          # Try PubMed Central for free versions
+    'enable_doi_direct': True,   # Try direct DOI resolution
+    'skip_known_paywalls': False, # Set to True to skip known paywalled domains
+}
+
 # ============================================================================
 # FILE PATHS - UPDATE THESE FOR YOUR SYSTEM
 # ============================================================================

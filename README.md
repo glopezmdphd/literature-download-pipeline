@@ -1,50 +1,76 @@
 # Medical Literature Pipeline
 
-Automates PubMed searches on a schedule, persists results to SQLite with full‑text search, and attempts to fetch open‑access PDFs via DOI and PubMed Central (PMC). Outputs database, logs, exports, and PDFs to local or OneDrive path.
+🔬 **Enterprise-ready automated PubMed literature monitoring with local-first design**
 
-Useful for clinical research curation (e.g., CT neurological prognosis, neuroimaging + AI) with incremental updates and export to CSV/Excel.
+Automates PubMed searches, persists results to SQLite with full‑text search, and attempts to fetch open‑access PDFs via DOI, PubMed Central (PMC), and Unpaywall. Optimized for Windows enterprise environments with robust local storage and optional email notifications.
 
-Repo: https://github.com/glopezmdphd/literature-download-pipeline
+Perfect for clinical research curation (CT neurological prognosis, neuroimaging + AI, biomarkers) with incremental updates and CSV/Excel export.
 
-## Requirements
+**Repository:** https://github.com/glopezmdphd/literature-download-pipeline
 
-Install dependencies:
-```bash
+## ✨ Key Features
+
+- 🏥 **Enterprise Windows compatible** - Local-first design avoids UNC path issues
+- 📊 **SQLite database** with full-text search and comprehensive metadata
+- 📄 **Smart PDF acquisition** - Unpaywall, PMC, DOI resolution with retry logic  
+- 📧 **Email notifications** (optional) - File-only mode for simplified operation
+- 🔄 **Incremental updates** - Only searches for new articles since last run
+- 📈 **Export capabilities** - CSV/Excel with multi-sheet topic breakdown
+- 🔒 **Secure configuration** - Environment variables, .env support, .gitignore protected
+
+## 🚀 Quick Start (Windows Enterprise)
+
+### 1. Local Installation (Recommended for Enterprise)
+```powershell
+# Clone to local drive (avoids network/UNC issues)
+git clone https://github.com/glopezmdphd/literature-download-pipeline.git
+cd literature-download-pipeline
+
+# Create virtual environment
+python -m venv venv
+.\venv\Scripts\Activate.ps1
+
+# Install dependencies  
 pip install -r requirements.txt
 ```
 
-## Enterprise Setup (Windows)
-
-### Quick Local Installation
-1. Clone this repository to your local drive:
-   ```bash
-   git clone https://github.com/glopezmdphd/literature-download-pipeline.git
-   cd literature-download-pipeline
-   ```
-
-2. Create and activate virtual environment:
-   ```bash
-   python -m venv venv
-   venv\Scripts\activate.bat
-   pip install -r requirements.txt
-   ```
-
-3. Configure paths in `config.py` - uses local C: drive by default to avoid UNC path issues
-
-### Folder Structure
-The pipeline creates this structure automatically:
+### 2. Configuration
+The pipeline uses **local-first paths** by default:
 ```
 C:\Users\YourUsername\Medical_Literature_Pipeline\
-├── database\
-│   └── articles.db
-├── logs\
-│   ├── pipeline.log
-│   └── pipeline.lock
-└── PDFs\
-    └── (topic folders created automatically)
+├── database\articles.db    # SQLite database
+├── logs\pipeline.log       # Execution logs  
+└── PDFs\                   # Downloaded PDFs by topic
+    ├── ct_neurological_prognosis\
+    ├── cardiac_biomarkers\
+    └── sepsis_prediction\
 ```
 
-Edit `config.py` or set environment variables (optionally via a `.env` file – see `.env.example`):
+### 3. Environment Setup (Optional)
+Create `.env` file for email notifications:
+```bash
+# PubMed Configuration (Required)
+PUBMED_EMAIL=your.email@organization.org
+
+# Email Notifications (Optional - can run in file-only mode)  
+EMAIL_USERNAME=your.email@organization.org
+EMAIL_PASSWORD=your_app_specific_password  
+EMAIL_RECIPIENT=your.email@organization.org
+```
+
+**Security Note:** Never commit passwords to Git. Use app-specific passwords or environment variables.
+
+### 4. Run Pipeline
+```powershell
+# Run with all configured topics
+python main.py
+
+# File-only mode (no email notifications)
+python main.py --no-email
+
+# Export results to Excel
+python main.py --export xlsx --split-by-topic
+```
 
 - Email (for notifications)
   - `EMAIL_USERNAME`, `EMAIL_PASSWORD`, `EMAIL_RECIPIENT`
@@ -216,3 +242,30 @@ You can add them on the repository Settings → General → Topics.
 ## License
 
 This project is licensed under the MIT License – see the `LICENSE` file for details.
+
+## 🔧 Recent Improvements (v2.1)
+
+### ✅ **Database Transaction Fix** 
+- **Issue:** Articles were being lost due to uncommitted database transactions
+- **Fix:** Individual article commits ensure data persistence even if PDF downloads fail
+- **Result:** Reliable article metadata storage independent of PDF success
+
+### 📧 **Simplified Email Configuration**
+- **File-only mode:** Pipeline works perfectly without email notifications
+- **Enterprise-friendly:** No complex app password setup required
+- **Optional notifications:** Easy to enable later with environment variables
+
+### 🏢 **Enterprise Windows Optimization**
+- **Local-first storage:** Eliminates UNC path issues on corporate networks
+- **Virtual environment:** Isolated dependencies prevent conflicts
+- **Robust error handling:** Continues processing even with network restrictions
+
+### 📊 **Enhanced PDF Success Rates**
+- **Unpaywall integration:** Finds open access versions of paywalled articles
+- **Multiple sources:** DOI, PMC, Unpaywall fallback chain
+- **Realistic expectations:** 20-30% success rate is normal for medical literature
+
+### 🔍 **Improved Monitoring** 
+- **Status checking:** `python quick_status.py` for real-time progress
+- **Database verification:** Comprehensive integrity checks
+- **Better logging:** Detailed execution tracking

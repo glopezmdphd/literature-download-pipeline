@@ -1,6 +1,6 @@
 # Medical Literature Pipeline
 
-Automates PubMed searches on a schedule, persists results to SQLite with full‑text search, and attempts to fetch open‑access PDFs via DOI and PubMed Central (PMC). Outputs database, logs, exports, and PDFs to a OneDrive or Azure path.
+Automates PubMed searches on a schedule, persists results to SQLite with full‑text search, and attempts to fetch open‑access PDFs via DOI and PubMed Central (PMC). Outputs database, logs, exports, and PDFs to local or OneDrive path.
 
 Useful for clinical research curation (e.g., CT neurological prognosis, neuroimaging + AI) with incremental updates and export to CSV/Excel.
 
@@ -13,20 +13,36 @@ Install dependencies:
 pip install -r requirements.txt
 ```
 
-## Setup
+## Enterprise Setup (Windows)
 
-### 1) Folders
+### Quick Local Installation
+1. Clone this repository to your local drive:
+   ```bash
+   git clone https://github.com/glopezmdphd/literature-download-pipeline.git
+   cd literature-download-pipeline
+   ```
 
-Create a base directory with subfolders (OneDrive example):
+2. Create and activate virtual environment:
+   ```bash
+   python -m venv venv
+   venv\Scripts\activate.bat
+   pip install -r requirements.txt
+   ```
+
+3. Configure paths in `config.py` - uses local C: drive by default to avoid UNC path issues
+
+### Folder Structure
+The pipeline creates this structure automatically:
 ```
-OneDrive - YourHealthSystem/
-└── Medical_Literature/
-    ├── database/
-    ├── logs/
-    └── PDFs/  (created automatically per topic)
+C:\Users\YourUsername\Medical_Literature_Pipeline\
+├── database\
+│   └── articles.db
+├── logs\
+│   ├── pipeline.log
+│   └── pipeline.lock
+└── PDFs\
+    └── (topic folders created automatically)
 ```
-
-### 2) Configure
 
 Edit `config.py` or set environment variables (optionally via a `.env` file – see `.env.example`):
 

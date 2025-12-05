@@ -4,17 +4,18 @@ import sqlite3
 import tempfile
 import unittest
 
-import main
+from config import PATHS
+from pipeline import init_database, save_article, update_pdf_status, search_database
 
 
 class TestFTSIndexingAndSearch(unittest.TestCase):
     def setUp(self):
         self.tmpdir = tempfile.mkdtemp(prefix="litpipe_")
         # Point the pipeline to a temp database and logs
-        main.PATHS['onedrive_base'] = self.tmpdir
-        main.PATHS['database'] = os.path.join(self.tmpdir, 'database', 'articles.db')
-        main.PATHS['log_file'] = os.path.join(self.tmpdir, 'logs', 'pipeline.log')
-        main.init_database()
+        PATHS['onedrive_base'] = self.tmpdir
+        PATHS['database'] = os.path.join(self.tmpdir, 'database', 'articles.db')
+        PATHS['log_file'] = os.path.join(self.tmpdir, 'logs', 'pipeline.log')
+        init_database()
 
     def tearDown(self):
         shutil.rmtree(self.tmpdir, ignore_errors=True)
@@ -46,28 +47,28 @@ class TestFTSIndexingAndSearch(unittest.TestCase):
             'https://pubmed.ncbi.nlm.nih.gov/67890/'
         )
 
-        conn = sqlite3.connect(main.PATHS['database'])
-        main.save_article(a1, conn=conn)
-        main.save_article(a2, conn=conn)
+        conn = sqlite3.connect(PATHS['database'])
+        save_article(a1, conn=conn)
+        save_article(a2, conn=conn)
         conn.commit()
         conn.close()
 
         # FTS search should find by title/abstract/keywords
-        res1 = main.search_database('glioma')
+        res1 = search_database('glioma')
         pmids1 = {str(r[0]) for r in res1}
         self.assertIn('12345', pmids1)
 
-        res2 = main.search_database('stroke')
+        res2 = search_database('stroke')
         pmids2 = {str(r[0]) for r in res2}
         self.assertIn('67890', pmids2)
 
         # Update triggers should preserve FTS contents after an update
-        conn = sqlite3.connect(main.PATHS['database'])
-        main.update_pdf_status('12345', pdf_path=os.path.join(self.tmpdir, 'PDFs', 'dummy.pdf'), downloaded=True, attempts=1, conn=conn)
+        conn = sqlite3.connect(PATHS['database'])
+        update_pdf_status('12345', pdf_path=os.path.join(self.tmpdir, 'PDFs', 'dummy.pdf'), downloaded=True, attempts=1, conn=conn)
         conn.commit()
         conn.close()
 
-        res3 = main.search_database('prognostic')
+        res3 = search_database('prognostic')
         pmids3 = {str(r[0]) for r in res3}
         self.assertIn('12345', pmids3)
 
@@ -85,15 +86,15 @@ class TestFTSIndexingAndSearch(unittest.TestCase):
             'test_topic',
             'https://pubmed.ncbi.nlm.nih.gov/24680/'
         )
-        conn = sqlite3.connect(main.PATHS['database'])
-        main.save_article(a, conn=conn)
+        conn = sqlite3.connect(PATHS['database'])
+        save_article(a, conn=conn)
         conn.commit()
         # Drop FTS to force fallback path
         conn.execute('DROP TABLE IF EXISTS articles_fts')
         conn.commit()
         conn.close()
 
-        res = main.search_database('injury')
+        res = search_database('injury')
         pmids = {str(r[0]) for r in res}
         self.assertIn('24680', pmids)
 

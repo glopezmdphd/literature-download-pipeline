@@ -98,7 +98,7 @@ PIPELINE_CONFIG = {
     'backoff_max': 8.0,            # Max backoff seconds
     'backoff_jitter': 0.5,         # Add +/- jitter seconds
     'max_email_attachment_mb': 25, # Attachment size guard; skip if exceeded
-    'attach_csv': True,            # Attach CSV along with Excel when under size limit
+    'attach_csv': False,           # Excel-only by default; set True to also attach CSV
 }
 
 # PDF host filtering: skip attempts on known paywalled domains unless allowed.

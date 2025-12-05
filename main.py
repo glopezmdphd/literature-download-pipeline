@@ -863,24 +863,25 @@ Next scheduled run: {(datetime.now() + timedelta(days=7)).strftime('%Y-%m-%d')}
     logger.info("Pipeline completed successfully")
     logger.info(summary)
 
-    # Generate exports
+    # Generate exports (Excel primary; CSV only if attach_csv enabled)
     xlsx_path = None
     csv_path = None
+    attach_csv = PIPELINE_CONFIG.get('attach_csv', False)
     try:
         xlsx_path = export_articles_excel(output_path=None, search_term=None, split_by_topic=True)
     except (OSError, ValueError) as e:
         logger.warning("Excel export failed: %s", e)
-    try:
-        csv_path = export_articles_csv(output_path=None, search_term=None, split_by_topic=False)
-        if isinstance(csv_path, list):
-            # Should not happen here; ensure single CSV
-            csv_path = csv_path[0] if csv_path else None
-    except (OSError, ValueError) as e:
-        logger.warning("CSV export failed: %s", e)
+    if attach_csv:
+        try:
+            csv_path = export_articles_csv(output_path=None, search_term=None, split_by_topic=False)
+            if isinstance(csv_path, list):
+                # Should not happen here; ensure single CSV
+                csv_path = csv_path[0] if csv_path else None
+        except (OSError, ValueError) as e:
+            logger.warning("CSV export failed: %s", e)
 
     # Decide attachments based on size guard
     max_mb = PIPELINE_CONFIG.get('max_email_attachment_mb', 25)
-    attach_csv = PIPELINE_CONFIG.get('attach_csv', True)
     attachments = []
     total_size_mb = 0.0
     def _add(path):

@@ -56,19 +56,23 @@ Edit `config.py` or set environment variables (optionally via a `.env` file – 
   - `PDF_HOSTS['allow']`: if non-empty, only these domains are attempted for PDF links
   - `PDF_HOSTS['deny']`: domains to skip (default includes common paywalled publishers)
 
-Search queries are defined in `config.py` as a dict of named topics:
-```python
-SEARCH_QUERIES = {
-    'ct_neurological_prognosis': {
-        'query': '("head CT" OR "cranial CT" OR "brain CT") AND (prognosis OR outcome) AND (neurological OR neurologic)',
-        'max_results': 50,
-    },
-    'neurological_imaging_ai': {
-        'query': '("neurological imaging" OR "brain imaging") AND ("artificial intelligence" OR "machine learning") AND (prognosis OR prediction)',
-        'max_results': 35,
-    },
-}
+Search queries are defined in `queries.yaml` (preferred) or inline in `config.py` as fallback:
+```yaml
+# queries.yaml
+ct_neurological_prognosis:
+  query: >-
+    (("Tomography, X-Ray Computed"[MeSH Terms]) OR (CT[tiab]))
+    AND (("Prognosis"[MeSH Terms]) OR (outcome*[tiab]))
+    AND (("Brain Injuries"[MeSH Terms]) OR (neurolog*[tiab]))
+
+neurological_imaging_ai:
+  query: >-
+    (("Neuroimaging"[MeSH Terms]) OR ("brain imaging"[tiab]))
+    AND (("Machine Learning"[MeSH Terms]) OR ("deep learning"[tiab]))
+    AND (("Prognosis"[MeSH Terms]) OR (predict*[tiab]))
 ```
+
+To add a new query, simply add a new entry to `queries.yaml` and re-run the pipeline.
 
 ### 3) Run
 
@@ -114,9 +118,27 @@ python main.py --no-incremental
 
 ### 4) Schedule
 
-- Windows Task Scheduler: run `python` with `main.py` weekly.
-- Azure Automation: upload as a runbook and schedule weekly.
-- macOS launchd (testing daily at 19:00 local time):
+#### Windows Task Scheduler (weekly)
+
+1. Open Task Scheduler (`taskschd.msc`).
+2. Click **Create Basic Task** → Name it "Medical Literature Pipeline".
+3. Trigger: **Weekly** → choose day/time (e.g., Sunday 8:00 AM).
+4. Action: **Start a program**.
+5. Program/script: `C:\Path\To\Python\python.exe` (or your venv Python).
+6. Add arguments: `C:\Path\To\literature-download-pipeline\main.py`
+7. Start in: `C:\Path\To\literature-download-pipeline`
+8. Finish and test with **Run** (right-click the task).
+
+Tip: If using a virtual environment:
+- Program: `C:\Path\To\literature-download-pipeline\.venv\Scripts\python.exe`
+- Arguments: `main.py`
+- Start in: `C:\Path\To\literature-download-pipeline`
+
+#### Azure Automation
+
+Upload as a runbook and schedule weekly.
+
+#### macOS launchd (testing daily at 19:00 local time):
   1. Edit `macos/com.medlit.pipeline.plist` and replace `/ABSOLUTE/PATH/TO/literature-download-pipeline` with your repo path; optionally point to your venv Python.
   2. Copy to `~/Library/LaunchAgents/com.medlit.pipeline.plist`.
   3. Load and start:
@@ -154,10 +176,11 @@ This repo includes a minimal GitHub Actions workflow that installs dependencies 
 - Email: use app passwords for O365 if required; firewall may block SMTP.
 - API Rate Limiting: set `PUBMED_API_KEY` for higher limits; tune `ADVANCED_CONFIG['rate_limit_delay']`.
 
-## What’s Inside
+## What's Inside
 
 - `main.py` – pipeline logic (search, parse, DB, PDF, email)
-- `config.py` – configuration (email, PubMed, paths, queries, advanced)
+- `config.py` – configuration (email, PubMed, paths, advanced settings)
+- `queries.yaml` – search queries (edit here to add/modify topics)
 - `requirements.txt` – dependencies
 - `.env.example` – example environment variables (copy to `.env` and edit)
 

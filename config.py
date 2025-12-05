@@ -59,24 +59,32 @@ PATHS = {
 # ============================================================================
 # SEARCH QUERIES FOR YOUR RESEARCH
 # ============================================================================
-SEARCH_QUERIES = {
-    # CT neurological prognosis/outcomes
-    'ct_neurological_prognosis': {
-        'query': '(("Tomography, X-Ray Computed"[MeSH Terms]) OR ("computed tomography"[tiab]) OR (CT[tiab]) OR ("head CT"[tiab]) OR ("cranial CT"[tiab])) AND (("Prognosis"[MeSH Terms]) OR (prognos*[tiab]) OR (outcome*[tiab]) OR (predict*[tiab]) OR ("risk model"[tiab]) OR ("risk prediction"[tiab])) AND (("Brain Injuries"[MeSH Terms]) OR ("Traumatic Brain Injury"[MeSH Terms]) OR (neurolog*[tiab]) OR (brain[tiab]) OR (cranial[tiab]))'
-    },
-    # AI/deep learning applied to CT brain/neuro imaging
-    'ml_ct_brain_analysis': {
-        'query': '(("Artificial Intelligence"[MeSH Terms]) OR ("Machine Learning"[MeSH Terms]) OR ("deep learning"[tiab]) OR ("machine learning"[tiab]) OR ("neural network"[tiab]) OR ("artificial intelligence"[tiab])) AND (("Tomography, X-Ray Computed"[MeSH Terms]) OR ("computed tomography"[tiab]) OR (CT[tiab])) AND (("Brain"[MeSH Terms]) OR ("Brain Injuries"[MeSH Terms]) OR (neurolog*[tiab]) OR (brain[tiab]) OR ("head trauma"[tiab]) OR ("brain injury"[tiab]) OR (stroke[tiab]))'
-    },
-    # Outcome/prediction models on CT for neuro conditions
-    'ct_outcome_prediction': {
-        'query': '(("Tomography, X-Ray Computed"[MeSH Terms]) OR ("computed tomography"[tiab]) OR (CT[tiab])) AND (("Prognosis"[MeSH Terms]) OR ("Risk Assessment"[MeSH Terms]) OR ("Models, Statistical"[MeSH Terms]) OR (prognos*[tiab]) OR (predict*[tiab]) OR ("prediction model"[tiab]) OR ("risk score"[tiab])) AND (("Brain"[MeSH Terms]) OR ("Brain Injuries"[MeSH Terms]) OR (neurolog*[tiab]) OR (brain[tiab]))'
-    },
-    # Neurological imaging + AI with prognostic focus
-    'neurological_imaging_ai': {
-        'query': '(("Diagnostic Imaging"[MeSH Terms]) OR ("Neuroimaging"[MeSH Terms]) OR ("brain imaging"[tiab]) OR ("neurological imaging"[tiab])) AND (("Artificial Intelligence"[MeSH Terms]) OR ("Machine Learning"[MeSH Terms]) OR ("deep learning"[tiab]) OR ("machine learning"[tiab]) OR ("artificial intelligence"[tiab])) AND (("Prognosis"[MeSH Terms]) OR (prognos*[tiab]) OR (predict*[tiab]) OR (outcome*[tiab]))'
+# Queries are loaded from queries.yaml if present; otherwise fallback to inline defaults.
+
+def _load_queries():
+    """Load search queries from queries.yaml or return inline fallback."""
+    _yaml_path = os.path.join(os.path.dirname(__file__), 'queries.yaml')
+    if os.path.exists(_yaml_path):
+        try:
+            import yaml
+            with open(_yaml_path, 'r', encoding='utf-8') as f:
+                raw = yaml.safe_load(f)
+            # Convert flat {name: {query: ...}} to expected format
+            if isinstance(raw, dict):
+                return {k: v if isinstance(v, dict) else {'query': v} for k, v in raw.items()}
+        except (OSError, ValueError, ImportError) as e:
+            print(f"Warning: Failed to load queries.yaml: {e}; using inline fallback.")
+    # Inline fallback (kept for backward compatibility)
+    return {
+        'ct_neurological_prognosis': {
+            'query': '(("Tomography, X-Ray Computed"[MeSH Terms]) OR ("computed tomography"[tiab]) OR (CT[tiab])) AND (("Prognosis"[MeSH Terms]) OR (prognos*[tiab]) OR (outcome*[tiab])) AND (("Brain Injuries"[MeSH Terms]) OR (neurolog*[tiab]))'
+        },
+        'ml_ct_brain_analysis': {
+            'query': '(("Machine Learning"[MeSH Terms]) OR ("deep learning"[tiab])) AND (("Tomography, X-Ray Computed"[MeSH Terms]) OR (CT[tiab])) AND (("Brain"[MeSH Terms]) OR (brain[tiab]))'
+        },
     }
-}
+
+SEARCH_QUERIES = _load_queries()
 
 # ============================================================================
 # ADVANCED SETTINGS

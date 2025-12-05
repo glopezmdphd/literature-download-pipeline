@@ -1,0 +1,43 @@
+# Search Queries for Medical Literature Pipeline
+# =============================================
+# Add or edit queries here without touching Python code.
+# Each query has a name (key) and a PubMed search string.
+#
+# Format:
+#   query_name:
+#     query: "PubMed search string"
+#
+# Tips:
+# - Use MeSH terms for precision: "Brain Injuries"[MeSH Terms]
+# - Use [tiab] for title/abstract search: (stroke[tiab])
+# - Wildcards: prognos* matches prognosis, prognostic, etc.
+# - Combine with AND, OR, NOT
+# - Test queries at: https://pubmed.ncbi.nlm.nih.gov/advanced/
+
+# CT neurological prognosis/outcomes
+ct_neurological_prognosis:
+  query: >-
+    (("Tomography, X-Ray Computed"[MeSH Terms]) OR ("computed tomography"[tiab]) OR (CT[tiab]) OR ("head CT"[tiab]) OR ("cranial CT"[tiab]))
+    AND (("Prognosis"[MeSH Terms]) OR (prognos*[tiab]) OR (outcome*[tiab]) OR (predict*[tiab]) OR ("risk model"[tiab]) OR ("risk prediction"[tiab]))
+    AND (("Brain Injuries"[MeSH Terms]) OR ("Traumatic Brain Injury"[MeSH Terms]) OR (neurolog*[tiab]) OR (brain[tiab]) OR (cranial[tiab]))
+
+# AI/deep learning applied to CT brain/neuro imaging
+ml_ct_brain_analysis:
+  query: >-
+    (("Artificial Intelligence"[MeSH Terms]) OR ("Machine Learning"[MeSH Terms]) OR ("deep learning"[tiab]) OR ("machine learning"[tiab]) OR ("neural network"[tiab]) OR ("artificial intelligence"[tiab]))
+    AND (("Tomography, X-Ray Computed"[MeSH Terms]) OR ("computed tomography"[tiab]) OR (CT[tiab]))
+    AND (("Brain"[MeSH Terms]) OR ("Brain Injuries"[MeSH Terms]) OR (neurolog*[tiab]) OR (brain[tiab]) OR ("head trauma"[tiab]) OR ("brain injury"[tiab]) OR (stroke[tiab]))
+
+# Outcome/prediction models on CT for neuro conditions
+ct_outcome_prediction:
+  query: >-
+    (("Tomography, X-Ray Computed"[MeSH Terms]) OR ("computed tomography"[tiab]) OR (CT[tiab]))
+    AND (("Prognosis"[MeSH Terms]) OR ("Risk Assessment"[MeSH Terms]) OR ("Models, Statistical"[MeSH Terms]) OR (prognos*[tiab]) OR (predict*[tiab]) OR ("prediction model"[tiab]) OR ("risk score"[tiab]))
+    AND (("Brain"[MeSH Terms]) OR ("Brain Injuries"[MeSH Terms]) OR (neurolog*[tiab]) OR (brain[tiab]))
+
+# Neurological imaging + AI with prognostic focus
+neurological_imaging_ai:
+  query: >-
+    (("Diagnostic Imaging"[MeSH Terms]) OR ("Neuroimaging"[MeSH Terms]) OR ("brain imaging"[tiab]) OR ("neurological imaging"[tiab]))
+    AND (("Artificial Intelligence"[MeSH Terms]) OR ("Machine Learning"[MeSH Terms]) OR ("deep learning"[tiab]) OR ("machine learning"[tiab]) OR ("artificial intelligence"[tiab]))
+    AND (("Prognosis"[MeSH Terms]) OR (prognos*[tiab]) OR (predict*[tiab]) OR (outcome*[tiab]))

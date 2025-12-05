@@ -17,6 +17,7 @@ import sqlite3
 import requests
 import time
 import logging
+from logging.handlers import RotatingFileHandler
 import smtplib
 import json
 from datetime import datetime, timedelta
@@ -75,9 +76,8 @@ logger = logging.getLogger(__name__)
 def setup_logging():
     """Configure logging for the pipeline.
 
-    Safely create the log directory only if a directory component exists. This
-    allows tests to inject a simple filename (no directory) without errors at
-    import time.
+    Uses RotatingFileHandler to prevent unbounded log growth (5 MB max, 3 backups).
+    Safely creates log directory only if a directory component exists.
     """
     log_target = PATHS.get('log_file')
     if log_target:
@@ -85,14 +85,26 @@ def setup_logging():
         if log_dir:  # Guard against empty string
             os.makedirs(log_dir, exist_ok=True)
 
-    logging.basicConfig(
-        level=logging.INFO,
-        format='%(asctime)s - %(levelname)s - %(message)s',
-        handlers=[
-            logging.FileHandler(log_target) if log_target else logging.StreamHandler(),
-            logging.StreamHandler()
-        ]
-    )
+    log_format = '%(asctime)s - %(levelname)s - %(message)s'
+    root_logger = logging.getLogger()
+    root_logger.setLevel(logging.INFO)
+
+    # Console handler (always)
+    console = logging.StreamHandler()
+    console.setFormatter(logging.Formatter(log_format))
+    root_logger.addHandler(console)
+
+    # Rotating file handler (if log path configured)
+    if log_target:
+        file_handler = RotatingFileHandler(
+            log_target,
+            maxBytes=5 * 1024 * 1024,  # 5 MB
+            backupCount=3,
+            encoding='utf-8'
+        )
+        file_handler.setFormatter(logging.Formatter(log_format))
+        root_logger.addHandler(file_handler)
+
     return logging.getLogger(__name__)
 
 # ============================================================================
